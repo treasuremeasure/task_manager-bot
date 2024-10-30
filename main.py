@@ -43,7 +43,6 @@ def handle_text(message):
                 "Название":message.text
             }
         }
-        print(user_tasks)
         user_state = 'wait_for_deadline'
     elif user_state == 'wait_for_deadline':
         response = 'Принято! Задай дедлайн задачке 🕓'
@@ -51,8 +50,8 @@ def handle_text(message):
         calendar_markup = calendar.create_calendar(name=calendar_callback.prefix, year=now.year, month=now.month)
         bot.send_message(message.chat.id, response, reply_markup=calendar_markup)
         user_tasks[message.chat.id]["Описание"] = message.text
-        print(user_tasks)
         user_state = 'wait_for_approval'
+        print(user_state)
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith(calendar_callback.prefix))
 def handle_calendar_callback(call: CallbackQuery):
@@ -104,14 +103,14 @@ def handle_calendar_callback(call: CallbackQuery):
         )
         print(f"{calendar_callback}: Cancellation")
 
-bot.message_handler(content_types=['text'])
+@bot.message_handler(content_types=['text'])
 def approval_of_task_or_not(message):
     global user_state
     if user_state == 'wait_for_approval':
         if message.text == 'Да':
             bot.send_message(message.chat.id, text = 'Отлично! Я вам напомню о задаче ближе к дедлайну')
         elif message.text == 'Нет':
-            keyboard = types.InlineKeyboardMarkup()
+            keyboard = types.ReplyKeyboardMarkup()
             button_1 = types.KeyboardButton(text='Название')
             button_2 = types.KeyboardButton(text='Описание')
             button_3 = types.KeyboardButton(text='Дедлайн')
