@@ -52,7 +52,7 @@ def handle_text(message):
         bot.send_message(message.chat.id, response, reply_markup=calendar_markup)
         user_tasks[message.chat.id]["Описание"] = message.text
         print(user_tasks)
-        user_state = None
+        user_state = 'wait_for_approval'
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith(calendar_callback.prefix))
 def handle_calendar_callback(call: CallbackQuery):
@@ -106,14 +106,18 @@ def handle_calendar_callback(call: CallbackQuery):
 
 bot.message_handler(content_types=['text'])
 def approval_of_task_or_not(message):
-    if message.text == 'Да':
-        bot.send_message(message.chat.id, text = 'Отлично! Я вам напомню о задаче ближе к дедлайну')
-    elif message.text == 'Нет':
-        keyboard = types.InlineKeyboardMarkup()
-        button_1 = types.KeyboardButton(text='Название')
-        button_2 = types.KeyboardButton(text='Описание')
-        button_3 = types.KeyboardButton(text='Дедлайн')
-        keyboard.row(button_1, button_2, button_3)
-        bot.send_message(message.chat.id, reply_markup = keyboard, text = 'Что бы вы хотели изменить?')
+    global user_state
+    if user_state == 'wait_for_approval':
+        if message.text == 'Да':
+            bot.send_message(message.chat.id, text = 'Отлично! Я вам напомню о задаче ближе к дедлайну')
+        elif message.text == 'Нет':
+            keyboard = types.InlineKeyboardMarkup()
+            button_1 = types.KeyboardButton(text='Название')
+            button_2 = types.KeyboardButton(text='Описание')
+            button_3 = types.KeyboardButton(text='Дедлайн')
+            keyboard.row(button_1, button_2, button_3)
+            bot.send_message(message.chat.id, reply_markup = keyboard, text = 'Что бы вы хотели изменить?')
+    else:
+        None
 
 bot.polling()
