@@ -6,7 +6,7 @@ from telebot.types import ReplyKeyboardRemove, CallbackQuery
 global user_state
 global user_tasks
 
-bot = TeleBot(token='8190046178:AAH8fqaC9QE_F91MNE332VKUBe-KEUhGcBM')
+bot = TeleBot(token='8190046178:AAH8fqaC9QE_F91MNE332VKUBe-KEUhGcBM')  #нужно засунуть в окружение переменных
 user_state = None
 calendar = Calendar(language=RUSSIAN_LANGUAGE)
 calendar_callback = CallbackData("calendar", "action", "year", "month", "day")  # CallbackData для календаря
@@ -70,8 +70,32 @@ def handle_calendar_callback(call: CallbackQuery):
             reply_markup=ReplyKeyboardRemove(),
         )
         print(f"{calendar_callback}: Day: {date.strftime('%d.%m.%Y')}")
-        user_tasks[message.сhat.id]["Дедлайн"] = date.strftime('%d.%m.%Y')  #не работает...
+        user_tasks[call.from_user.id]["Дедлайн"] = date.strftime('%d.%m.%Y') 
+        task_name = user_tasks.get(call.from_user.id, {}).get("Название", "Название не указано") 
+        task_description = user_tasks.get(call.from_user.id, {}).get("Описание", "Описание нет")
+        task_deadline = user_tasks.get(call.from_user.id, {}).get("Дедлайн", "Дедлайна нет")
+        keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        button_1 = types.KeyboardButton(text='Да')
+        button_2 = types.KeyboardButton(text='Нет')
+        keyboard.row(button_1, button_2)
+        bot.send_message(chat_id=call.from_user.id, reply_markup=keyboard, text = 
+        
+    
+    f'''
+    Задача 
+    
+Название: {task_name}
+Описание: {task_description}
+Дедлайн: {task_deadline}
+        
+Подтверждаете?
+    
+    '''
+    
+    )
+        
         print(user_tasks)
+    
     elif action == "CANCEL":  
         bot.send_message(
             chat_id=call.from_user.id,
@@ -79,5 +103,17 @@ def handle_calendar_callback(call: CallbackQuery):
             reply_markup=ReplyKeyboardRemove(),
         )
         print(f"{calendar_callback}: Cancellation")
+
+bot.message_handler(content_types=['text'])
+def approval_of_task_or_not(message):
+    if message.text == 'Да':
+        bot.send_message(message.chat.id, text = 'Отлично! Я вам напомню о задаче ближе к дедлайну')
+    elif message.text == 'Нет':
+        keyboard = types.InlineKeyboardMarkup()
+        button_1 = types.KeyboardButton(text='Название')
+        button_2 = types.KeyboardButton(text='Описание')
+        button_3 = types.KeyboardButton(text='Дедлайн')
+        keyboard.row(button_1, button_2, button_3)
+        bot.send_message(message.chat.id, reply_markup = keyboard, text = 'Что бы вы хотели изменить?')
 
 bot.polling()
