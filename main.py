@@ -3,17 +3,16 @@ from telebot import TeleBot, types
 from telebot_calendar import Calendar, RUSSIAN_LANGUAGE, CallbackData
 from telebot.types import ReplyKeyboardRemove, CallbackQuery
 
-global user_state
-global user_tasks
+user_tasks = {}
+bot_state = None
 
 bot = TeleBot(token='8190046178:AAH8fqaC9QE_F91MNE332VKUBe-KEUhGcBM')  #нужно засунуть в окружение переменных
-user_state = None
+bot_state = None
 calendar = Calendar(language=RUSSIAN_LANGUAGE)
 calendar_callback = CallbackData("calendar", "action", "year", "month", "day")  # CallbackData для календаря
 
 @bot.message_handler(commands=['start'])
 def wake_up(message):  # первый ответ бота
-    user_state = 'wait_for_task_name'
     user_name = message.from_user.first_name
     response = f'''Добрый день, {user_name}!
 Я ваш персональный таск-менеджер. Вы можете в меня грузить ваши задачи, а я буду стараться за ними следить и напоминать о дедлайнах!'''
@@ -26,33 +25,12 @@ def wake_up(message):  # первый ответ бота
 
 @bot.message_handler(func=lambda message: message.text == 'Создать задачу')
 def give_name_to_the_task(message): 
-    global user_state
+    global bot_state
     response = 'Напиши название задачи 🚀'
     bot.send_message(message.chat.id, response)
-    user_state = 'wait_for_description'
+    bot_state = 'wait_for_task_name'
+    print(bot_state)
 
-@bot.message_handler(content_types=['text'])
-def handle_text(message):
-    global user_tasks
-    global user_state
-    if user_state == 'wait_for_description':
-        response = 'Принято! Напиши описание задачи 🚀'
-        bot.send_message(message.chat.id, response)
-        user_tasks = { 
-            message.chat.id:{
-                "Название":message.text
-            }
-        }
-        print(user_tasks)
-        user_state = 'wait_for_deadline'
-    elif user_state == 'wait_for_deadline':
-        response = 'Принято! Задай дедлайн задачке 🕓'
-        now = datetime.datetime.now()
-        calendar_markup = calendar.create_calendar(name=calendar_callback.prefix, year=now.year, month=now.month)
-        bot.send_message(message.chat.id, response, reply_markup=calendar_markup)
-        user_tasks[message.chat.id]["Описание"] = message.text
-        print(user_tasks)
-        user_state = None
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith(calendar_callback.prefix))
 def handle_calendar_callback(call: CallbackQuery):
@@ -104,16 +82,70 @@ def handle_calendar_callback(call: CallbackQuery):
         )
         print(f"{calendar_callback}: Cancellation")
 
-bot.message_handler(content_types=['text'])
-def approval_of_task_or_not(message):
-    if message.text == 'Да':
-        bot.send_message(message.chat.id, text = 'Отлично! Я вам напомню о задаче ближе к дедлайну')
-    elif message.text == 'Нет':
-        keyboard = types.InlineKeyboardMarkup()
-        button_1 = types.KeyboardButton(text='Название')
-        button_2 = types.KeyboardButton(text='Описание')
-        button_3 = types.KeyboardButton(text='Дедлайн')
-        keyboard.row(button_1, button_2, button_3)
-        bot.send_message(message.chat.id, reply_markup = keyboard, text = 'Что бы вы хотели изменить?')
+@bot.message_handler(content_types=['text'])
+def handle_text(message):
+    
+    global bot_state, user_tasks
+
+    if bot_state == 'wait_for_task_name':
+        response = 'Принято! Напиши описание задачи 🚀'
+        bot.send_message(message.chat.id, response)
+        user_tasks[message.chat.id] = {"Название": message.text}
+        bot_state = 'wait_for_description'
+        print(bot_state)
+
+    elif bot_state == 'wait_for_description':
+        response = 'Принято! Задай дедлайн задачке 🕓'
+        now = datetime.datetime.now()
+        calendar_markup = calendar.create_calendar(name=calendar_callback.prefix, year=now.year, month=now.month)
+        bot.send_message(message.chat.id, response, reply_markup=calendar_markup)
+        user_tasks[message.chat.id]["Описание"] = message.text
+        bot_state = 'wait_for_approval'
+        print(bot_state)
+
+    elif bot_state == 'wait_for_approval':
+        if message.text == 'Да':
+            bot.send_message(message.chat.id, text='Отлично! Я вам напомню о задаче ближе к дедлайну')
+            bot_state = 'send_notfification_about_task_deadline'
+        elif message.text == 'Нет':
+            keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
+            button_1 = types.KeyboardButton(text='Название')
+            button_2 = types.KeyboardButton(text='Описание')
+            button_3 = types.KeyboardButton(text='Дедлайн')
+            keyboard.row(button_1, button_2, button_3)
+            bot.send_message(message.chat.id, reply_markup=keyboard, text='Что бы вы хотели изменить?')
+            bot_state = 'smth_needs_to_be_changed_in_the_task'
+
+    elif bot_state == 'smth_needs_to_be_changed_in_the_task':
+        if message.text == 'Название':
+            bot.send_message(message.chat.id, text = 'Задайте новое название 🤓')
+            bot_state = 'wait_for_new_task_name'
+        if message.text == 'Описание':
+            bot.send_message(message.chat.id, text = 'Задайте новое описание 🤓')
+            bot_state = 'wait_for_new_description'
+        if message.text == 'Дедлайн':
+            now = datetime.datetime.now()
+            calendar_markup = calendar.create_calendar(name=calendar_callback.prefix, year=now.year, month=now.month)
+            bot.send_message(message.chat.id, text = 'Задайте новый дедлайн 🤓', reply_markup=calendar_markup)
+            bot_state = 'wait_for_new_description'
+
+    elif bot_state == 'wait_for_new_task_name':
+        new_task_name = message.text
+        bot.send_message(message.chat.id, text = 
+        
+        f'''
+    Задача 
+    
+Название: {new_task_name}
+Описание: {task_description}
+Дедлайн: {task_deadline}
+        
+Подтверждаете?
+    
+    '''
+        
+        )                        #доработать
+        
+
 
 bot.polling()
