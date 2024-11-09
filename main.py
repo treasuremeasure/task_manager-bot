@@ -8,7 +8,6 @@ user_tasks = {}
 bot_state = None
 
 bot = TeleBot(token='8190046178:AAH8fqaC9QE_F91MNE332VKUBe-KEUhGcBM')  #нужно засунуть в окружение переменных
-bot_state = None
 calendar = Calendar(language=RUSSIAN_LANGUAGE)
 calendar_callback = CallbackData("calendar", "action", "year", "month", "day")  # CallbackData для календаря
 
@@ -35,6 +34,7 @@ def give_name_to_the_task(message):
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith(calendar_callback.prefix))
 def handle_calendar_callback(call: CallbackQuery):
+    global bot_state
     # Обработка выбора даты
     name, action, year, month, day = call.data.split(calendar_callback.sep)
     # Processing the calendar. Get either the date or None if the buttons are of a different type
@@ -74,6 +74,32 @@ def handle_calendar_callback(call: CallbackQuery):
     )
         
         print(user_tasks)
+
+        if bot_state == 'wait_for_new_deadline':
+            new_deadline = date.strftime('%d.%m.%Y')
+            user_tasks[call.from_user.id]["Дедлайн"] = new_deadline
+            task_name = user_tasks[call.from_user.id].get("Название", "Название не указано")
+            task_description = user_tasks[call.from_user.id].get("Описание", "Описание не указано")
+            
+            # Клавиатура для подтверждения
+            keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
+            button_yes = types.KeyboardButton(text='Да')
+            button_no = types.KeyboardButton(text='Нет')
+            keyboard.row(button_yes, button_no)
+            
+            # Отправка подтверждения с обновленным дедлайном
+            bot.send_message(call.from_user.id, text=f'''
+    Задача 
+
+Название: {task_name}
+Описание: {task_description}
+Дедлайн: {new_deadline}
+
+Подтверждаете?
+            ''', reply_markup=keyboard)
+            
+            # Переключаемся на состояние ожидания подтверждения
+            bot_state = 'wait_for_approval'
     
     elif action == "CANCEL":  
         bot.send_message(
@@ -107,7 +133,7 @@ def handle_text(message):
     elif bot_state == 'wait_for_approval':
         if message.text == 'Да':
             bot.send_message(message.chat.id, text='Отлично! Я вам напомню о задаче ближе к дедлайну')
-            bot_state = 'send_notfification_about_task_deadline'
+            bot_state = 'send_notification_about_task_deadline'
         elif message.text == 'Нет':
             keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
             button_1 = types.KeyboardButton(text='Название')
@@ -128,11 +154,17 @@ def handle_text(message):
             now = datetime.datetime.now()
             calendar_markup = calendar.create_calendar(name=calendar_callback.prefix, year=now.year, month=now.month)
             bot.send_message(message.chat.id, text = 'Задайте новый дедлайн 🤓', reply_markup=calendar_markup)
-            bot_state = 'wait_for_new_description'
+            bot_state = 'wait_for_new_deadline'
 
     elif bot_state == 'wait_for_new_task_name':
         new_task_name = message.text
-        bot.send_message(message.chat.id, text = 
+        task_description = user_tasks[message.chat.id].get('Описание')
+        task_deadline = user_tasks[message.chat.id].get('Дедлайн')
+        keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        button_4 = types.KeyboardButton(text='Да')
+        button_5 = types.KeyboardButton(text = 'Нет')
+        keyboard.row(button_4, button_5)
+        bot.send_message(message.chat.id, reply_markup=keyboard, text = 
         
         f'''
     Задача 
@@ -145,8 +177,65 @@ def handle_text(message):
     
     '''
         
-        )                        #доработать
         
+        )        
 
+        bot_state = 'wait_for_approval'           
+        
+    elif bot_state == 'wait_for_new_description':
+        new_task_description = message.text
+        task_name = user_tasks[message.chat.id].get('Название')
+        task_deadline = user_tasks[message.chat.id].get('Дедлайн')
+        keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        button_6 = types.KeyboardButton(text='Да')
+        button_7 = types.KeyboardButton(text = 'Нет')
+        keyboard.row(button_6, button_7)
+        bot.send_message(message.chat.id, reply_markup=keyboard,  text = 
+        
+        f'''
+    Задача 
+    
+Название: {task_name}
+Описание: {new_task_description}
+Дедлайн: {task_deadline}
+        
+Подтверждаете?
+    
+    '''
+        
+        )              
+        
+        bot_state = 'wait_for_approval'
+
+
+    elif bot_state == 'wait_for_new_deadline':
+        new_task_deadline = message.text
+        task_name = user_tasks[message.chat.id].get('Название')
+        task_deadline = user_tasks[message.chat.id].get('Дедлайн')
+        keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        button_6 = types.KeyboardButton(text='Да')
+        button_7 = types.KeyboardButton(text = 'Нет')
+        keyboard.row(button_6, button_7)
+        bot.send_message(message.chat.id, reply_markup=keyboard,  text = 
+        
+        f'''
+    Задача 
+    
+Название: {task_name}
+Описание: {task_description}
+Дедлайн: {task_deadline}
+        
+Подтверждаете?
+    
+    '''
+        
+        )              
+        
+        bot_state = 'wait_for_approval'
+
+        #код с обработкой нового дедлайна находится в callback_query_handler (if bot_state = wait_for_new_deadline)
+
+        #добавить убирание кнопок после их использования
+        #добавить функционал по напоминанию о дедлайнах
 
 bot.polling()
