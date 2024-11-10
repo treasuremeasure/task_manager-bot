@@ -1,8 +1,12 @@
 
-import datetime
+from datetime import datetime, timedelta
 from telebot import TeleBot, types
 from telebot_calendar import Calendar, RUSSIAN_LANGUAGE, CallbackData
 from telebot.types import ReplyKeyboardRemove, CallbackQuery
+from apscheduler.schedulers.background import BackgroundScheduler
+
+scheduler = BackgroundScheduler()
+scheduler.start()
 
 user_tasks = {}
 bot_state = None
@@ -27,7 +31,8 @@ def wake_up(message):  # первый ответ бота
 def give_name_to_the_task(message): 
     global bot_state
     response = 'Напиши название задачи 🚀'
-    bot.send_message(message.chat.id, response)
+    remove_keyboard = types.ReplyKeyboardRemove()
+    bot.send_message(message.chat.id, response, reply_markup=remove_keyboard)
     bot_state = 'wait_for_task_name'
     print(bot_state)
 
@@ -123,7 +128,7 @@ def handle_text(message):
 
     elif bot_state == 'wait_for_description':
         response = 'Принято! Задай дедлайн задачке 🕓'
-        now = datetime.datetime.now()
+        now = datetime.now()
         calendar_markup = calendar.create_calendar(name=calendar_callback.prefix, year=now.year, month=now.month)
         bot.send_message(message.chat.id, response, reply_markup=calendar_markup)
         user_tasks[message.chat.id]["Описание"] = message.text
@@ -132,8 +137,12 @@ def handle_text(message):
 
     elif bot_state == 'wait_for_approval':
         if message.text == 'Да':
-            bot.send_message(message.chat.id, text='Отлично! Я вам напомню о задаче ближе к дедлайну')
+            remove_keyboard = types.ReplyKeyboardRemove()
+            bot.send_message(message.chat.id, text='Отлично! Я вам напомню о задаче ближе к дедлайну', reply_markup=remove_keyboard)
             bot_state = 'send_notification_about_task_deadline'
+            task_name = user_tasks[message.chat.id]["Название"]
+            deadline = user_tasks[message.chat.id]["Дедлайн"]
+            schedule_reminders(message.chat.id, task_name, deadline)
         elif message.text == 'Нет':
             keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
             button_1 = types.KeyboardButton(text='Название')
@@ -145,10 +154,12 @@ def handle_text(message):
 
     elif bot_state == 'smth_needs_to_be_changed_in_the_task':
         if message.text == 'Название':
-            bot.send_message(message.chat.id, text = 'Задайте новое название 🤓')
+            remove_keyboard = types.ReplyKeyboardRemove()
+            bot.send_message(message.chat.id, text = 'Задайте новое название 🤓', reply_markup=remove_keyboard)
             bot_state = 'wait_for_new_task_name'
         if message.text == 'Описание':
-            bot.send_message(message.chat.id, text = 'Задайте новое описание 🤓')
+            remove_keyboard = types.ReplyKeyboardRemove()
+            bot.send_message(message.chat.id, text = 'Задайте новое описание 🤓', reply_markup=remove_keyboard)
             bot_state = 'wait_for_new_description'
         if message.text == 'Дедлайн':
             now = datetime.datetime.now()
@@ -235,7 +246,35 @@ def handle_text(message):
 
         #код с обработкой нового дедлайна находится в callback_query_handler (if bot_state = wait_for_new_deadline)
 
-        #добавить убирание кнопок после их использования
-        #добавить функционал по напоминанию о дедлайнах
+
+def send_reminder(chat_id, task_name, days_left):
+    message_text = f"⚠️ Напоминание!\nДо дедлайна задачи '{task_name}' осталось {days_left} дней!"
+    bot.send_message(chat_id=chat_id, text=message_text)
+
+# Функция для планирования напоминаний
+def schedule_reminders(chat_id, task_name, deadline_str):
+    # Преобразование строки дедлайна в datetime
+    deadline_date = datetime.strptime(deadline_str, '%d.%m.%Y')
+
+    scheduled_dates = []
+    
+    # Планируем напоминания за 3, 2 и 1 день
+    for days in [3, 2, 1]:
+        reminder_date = deadline_date - timedelta(days=days)
+        if reminder_date > datetime.now():
+            scheduler.add_job(
+                send_reminder,
+                'date',
+                run_date=reminder_date,
+                args=[chat_id, task_name, days]
+            )
+            scheduled_dates.append(reminder_date.strftime('%d.%m.%Y'))
+    
+    if scheduled_dates:
+        confirmation_message = f"✅ Напоминания запланированы на следующие даты:\n{', '.join(scheduled_dates)}"
+    else:
+        confirmation_message = "⚠️ Напоминания не были запланированы, так как дата дедлайна слишком близко"
+    
+    bot.send_message(chat_id=chat_id, text=confirmation_message)
 
 bot.polling()
