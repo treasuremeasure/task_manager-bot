@@ -1,9 +1,11 @@
-
 from datetime import datetime, timedelta
 from telebot import TeleBot, types
 from telebot_calendar import Calendar, RUSSIAN_LANGUAGE, CallbackData
 from telebot.types import ReplyKeyboardRemove, CallbackQuery
 from apscheduler.schedulers.background import BackgroundScheduler
+# from google_calendar_service import GoogleCalendarService
+
+# calendar_service = GoogleCalendarService()
 
 scheduler = BackgroundScheduler()
 scheduler.start()
@@ -137,12 +139,21 @@ def handle_text(message):
 
     elif bot_state == 'wait_for_approval':
         if message.text == 'Да':
-            remove_keyboard = types.ReplyKeyboardRemove()
-            bot.send_message(message.chat.id, text='Отлично! Я вам напомню о задаче ближе к дедлайну', reply_markup=remove_keyboard)
-            bot_state = 'send_notification_about_task_deadline'
             task_name = user_tasks[message.chat.id]["Название"]
+            task_description = user_tasks[message.chat.id]["Описание"]
             deadline = user_tasks[message.chat.id]["Дедлайн"]
+
+            ''' success, result = calendar_service.create_event(task_name, task_description, deadline)
+    
+            if success:
+                response = f'Отлично! Я создал задачу и добавил её в ваш Google Calendar.\nСсылка на событие: {result}'
+            else:
+                response = f'Задача создана, но произошла ошибка при добавлении в календарь: {result}' '''
+    
+            remove_keyboard = types.ReplyKeyboardRemove()
+            bot.send_message(message.chat.id, text='Отлично! Я вам напомню о задаче ближе к дедлайну 👌', reply_markup=remove_keyboard)
             schedule_reminders(message.chat.id, task_name, deadline)
+            bot_state = 'send_notification_about_task_deadline'
         elif message.text == 'Нет':
             keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
             button_1 = types.KeyboardButton(text='Название')
@@ -259,22 +270,29 @@ def schedule_reminders(chat_id, task_name, deadline_str):
     scheduled_dates = []
     
     # Планируем напоминания за 3, 2 и 1 день
-    for days in [3, 2, 1]:
-        reminder_date = deadline_date - timedelta(days=days)
-        if reminder_date > datetime.now():
+    # Вычисляем разницу между дедлайном и текущей датой в днях
+    days_until_deadline = (deadline_date - datetime.now()).days
+        # Если до дедлайна меньше 3 дней, отправляем уведомление сразу
+    if days_until_deadline <= 3:
             scheduler.add_job(
                 send_reminder,
                 'date',
-                run_date=reminder_date,
-                args=[chat_id, task_name, days]
+                run_date=datetime.now(),
+                args=[chat_id, task_name, days_until_deadline]
             )
-            scheduled_dates.append(reminder_date.strftime('%d.%m.%Y'))
-    
-    if scheduled_dates:
-        confirmation_message = f"✅ Напоминания запланированы на следующие даты:\n{', '.join(scheduled_dates)}"
+            scheduled_dates.append(datetime.now().strftime('%d.%m.%Y'))
     else:
-        confirmation_message = "⚠️ Напоминания не были запланированы, так как дата дедлайна слишком близко"
-    
-    bot.send_message(chat_id=chat_id, text=confirmation_message)
+            # Иначе планируем уведомления за 3, 2 и 1 день
+            for days in [3, 2, 1]:
+                reminder_date = deadline_date - timedelta(days=days)
+                if reminder_date > datetime.now():
+                    scheduler.add_job(
+                        send_reminder,
+                        'date', 
+                        run_date=reminder_date,
+                        args=[chat_id, task_name, days]
+                    )
+                    scheduled_dates.append(reminder_date.strftime('%d.%m.%Y'))
+
 
 bot.polling()
