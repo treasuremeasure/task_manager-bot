@@ -5,10 +5,10 @@ from telebot.types import ReplyKeyboardRemove, CallbackQuery
 import sqlite3
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.executors.pool import ThreadPoolExecutor
-#from google_calendar_service import GoogleCalendarService
+from google_calendar_service import GoogleCalendarService
 
 
-#calendar_service = GoogleCalendarService()
+calendar_service = GoogleCalendarService()
 
 user_tasks = {}
 bot_state = None
@@ -43,10 +43,10 @@ def save_task(chat_id, task_name, description, deadline):
     conn.commit()
     conn.close()
 
-    #deadline_date = datetime.strptime(deadline, '%d.%m.%Y')
-    #calendar_link = calendar_service.add_event(task_name, description, deadline_date)
+    deadline_date = datetime.strptime(deadline, '%d.%m.%Y')
+    calendar_link = calendar_service.add_event(task_name, description, deadline_date) #распаллелить на две функции
     
-    #return calendar_link
+    return calendar_link
 
 def get_task(chat_id):
     conn = sqlite3.connect('tasks.db')
@@ -202,13 +202,13 @@ def handle_text(message):
             deadline = user_tasks[message.chat.id]["Дедлайн"]
             
             # Сохраняем задачу в БД
-            save_task(message.chat.id, task_name, task_description, deadline)
+            # save_task(message.chat.id, task_name, task_description, deadline)
             
-            #calendar_link = save_task(message.chat.id, task_name, task_description, deadline)
+            calendar_link = save_task(message.chat.id, task_name, task_description, deadline)
         
             response = 'Отлично! Я вам напомню о задаче ближе к дедлайну 👌'
-            #if calendar_link:
-               # response += f'\nСобытие добавлено в календарь: {calendar_link}'
+            if calendar_link:
+                response += f'\nСобытие добавлено в календарь: {calendar_link}'
 
 
             # Очищаем временное хранилище
