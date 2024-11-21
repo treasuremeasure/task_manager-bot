@@ -2,14 +2,13 @@ from datetime import datetime, timedelta
 from telebot import TeleBot, types
 from telebot_calendar import Calendar, RUSSIAN_LANGUAGE, CallbackData
 from telebot.types import ReplyKeyboardRemove, CallbackQuery
-from apscheduler.schedulers.background import BackgroundScheduler
-import pytz
 import sqlite3
-# from google_calendar_service import GoogleCalendarService
-# calendar_service = GoogleCalendarService()
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.executors.pool import ThreadPoolExecutor
+#from google_calendar_service import GoogleCalendarService
 
-scheduler = BackgroundScheduler(daemon=True)
-scheduler.start()
+
+#calendar_service = GoogleCalendarService()
 
 user_tasks = {}
 bot_state = None
@@ -43,6 +42,11 @@ def save_task(chat_id, task_name, description, deadline):
               (chat_id, task_name, description, deadline))
     conn.commit()
     conn.close()
+
+    #deadline_date = datetime.strptime(deadline, '%d.%m.%Y')
+    #calendar_link = calendar_service.add_event(task_name, description, deadline_date)
+    
+    #return calendar_link
 
 def get_task(chat_id):
     conn = sqlite3.connect('tasks.db')
@@ -200,14 +204,18 @@ def handle_text(message):
             # Сохраняем задачу в БД
             save_task(message.chat.id, task_name, task_description, deadline)
             
+            #calendar_link = save_task(message.chat.id, task_name, task_description, deadline)
+        
+            response = 'Отлично! Я вам напомню о задаче ближе к дедлайну 👌'
+            #if calendar_link:
+               # response += f'\nСобытие добавлено в календарь: {calendar_link}'
+
+
             # Очищаем временное хранилище
             user_tasks.pop(message.chat.id, None)
             
             remove_keyboard = types.ReplyKeyboardRemove()
-            bot.send_message(message.chat.id, 
-                            text='Отлично! Я вам напомню о задаче ближе к дедлайну 👌', 
-                            reply_markup=remove_keyboard)
-            schedule_reminders(message.chat.id, task_name, deadline)
+            bot.send_message(message.chat.id, text='Отлично! Я вам напомню о задаче ближе к дедлайну 👌', reply_markup=remove_keyboard)
             bot_state = 'send_notification_about_task_deadline'
         
         elif message.text == 'Нет':
@@ -313,48 +321,48 @@ def handle_text(message):
 
         #код с обработкой нового дедлайна находится в callback_query_handler (if bot_state = wait_for_new_deadline)
 
+'НАПОМИНАНИЯ'
+if __name__ == "__main__":
+# Инициализация APScheduler
+    executors = {
+    'default': ThreadPoolExecutor(10)
+}
 
-def send_reminder(chat_id, task_name, days_left):
-    message_text = f"⚠️ Напоминание!\nДо дедлайна задачи '{task_name}' осталось {days_left} дней!"
-    bot.send_message(chat_id=chat_id, text=message_text)
+scheduler = BackgroundScheduler(executors=executors)
+scheduler.start()
 
-# Функция для планирования напоминаний
-def schedule_reminders(chat_id, task_name, deadline_str):
-    moscow_tz = pytz.timezone('Europe/Moscow')
-    current_time = datetime.now(moscow_tz)
-    deadline_date = moscow_tz.localize(datetime.strptime(deadline_str, '%d.%m.%Y'))
+# Функция для проверки задач и отправки уведомлений
+def check_tasks_and_notify():
+    connection = sqlite3.connect('tasks.db')  # Укажите путь к вашей БД
+    cursor = connection.cursor()
     
-    # Используем current_time вместо datetime.now()
-    days_until_deadline = (deadline_date - current_time).days
+    # Получаем текущую дату
+    current_date = datetime.now().date()
     
-    print(f"Scheduling reminders for task: {task_name}")
-    print(f"Deadline: {deadline_str}")
-    print(f"Days until deadline: {days_until_deadline}")
+    # SQL-запрос для получения задач с дедлайнами
+    cursor.execute("SELECT chat_id, task_name, deadline FROM tasks")
+    tasks = cursor.fetchall()
 
-    scheduled_dates = []
-    # Если до дедлайна меньше 3 дней, отправляем уведомление сразу
-    if days_until_deadline <= 3:
-        scheduler.add_job(
-            send_reminder,
-            'date',
-            run_date=current_time,  # используем current_time
-            args=[chat_id, task_name, days_until_deadline]
-        )
-        scheduled_dates.append(current_time.strftime('%d.%m.%Y'))
-    else:
-        # Иначе планируем уведомления за 3, 2 и 1 день
-        for days in [3, 2, 1]:
-            reminder_date = deadline_date - timedelta(days=days)
-            if reminder_date > current_time:  # используем current_time
-                scheduler.add_job(
-                    send_reminder,
-                    'date', 
-                    run_date=reminder_date,
-                    args=[chat_id, task_name, days]
-                )
-                scheduled_dates.append(reminder_date.strftime('%d.%m.%Y'))
-    
-    print(f"Scheduled dates: {scheduled_dates}")
+    for task in tasks:
+        chat_id, task_name, deadline = task
+        deadline_date = datetime.strptime(deadline, '%d.%m.%Y').date()
+        days_left = (deadline_date - current_date).days
 
+        # Уведомления за 3, 2 и 1 день до дедлайна
+        if days_left in [3, 2, 1]:
+            bot.send_message(chat_id, f"🔔 Напоминание: до дедлайна задачи '{task_name}' осталось {days_left} день(дня).")
 
-bot.polling()
+    connection.close()
+
+# Добавляем задачу проверки в APScheduler
+scheduler.add_job(check_tasks_and_notify, 'interval', minutes=1)
+
+# Основной поток программы
+try:
+    print("Бот запущен. Планировщик активен.")
+    bot.polling()
+except (KeyboardInterrupt, SystemExit):
+    scheduler.shutdown()
+    print("Бот остановлен.")
+
+'НАПОМИНАНИЯ' 
