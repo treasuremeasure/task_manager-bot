@@ -6,14 +6,14 @@ import sqlite3
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.executors.pool import ThreadPoolExecutor
 from google_calendar_service import GoogleCalendarService
-
+import os
 
 calendar_service = GoogleCalendarService()
 
 user_tasks = {}
 bot_state = None
 
-bot = TeleBot(token='8190046178:AAH8fqaC9QE_F91MNE332VKUBe-KEUhGcBM')  #нужно засунуть в окружение переменных
+bot = TeleBot(token=os.getenv('TELEGRAM_BOT_TOKEN'))  # Получаем токен из переменных окружения
 calendar = Calendar(language=RUSSIAN_LANGUAGE)
 calendar_callback = CallbackData("calendar", "action", "year", "month", "day")  # CallbackData для календаря
 
